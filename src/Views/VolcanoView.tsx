@@ -43,6 +43,19 @@ const YTVideo = styled("div")`
 
 `;
 
+const FishTank = styled("div")`
+  min-width: 800px;
+  min-height: 450px;
+  padding: 20px;
+  margin: 20px auto;
+  display: flex;
+  align: center;
+  justify-content: center; /* center the audio player */
+  border-radius: 16px;
+  border: 1px solid var(--border-color);
+
+`;
+
 const AudioCard1 = styled("div")`
   min-width: 750px;
   min-height: 30px;
@@ -81,7 +94,7 @@ const AudioCard = styled("div")`
 
 const ImageBgTop = styled("div")`
   min-width: 800px;
-  min-height: 150px;
+  min-height: 120px;
   background-image: url('/background-1.png');
   background-position: center;
   background-size: 800px;
@@ -132,7 +145,7 @@ const SettingsContainer = styled("div")`
 `;
 
 const SettingsTitle = styled("h2")`
-  color: var(--accent-color);
+  color: #ffffff;
   font-size: 1.5rem;
   margin-bottom: 24px;
   text-align: center;
@@ -190,19 +203,6 @@ export const VolcanoView: Component = () => {
         <HeatingTimeDisplay />
       </MainCard>
 
-      <ZenStudio>
-       <ZenStudioTitle>{t("zenstudio")}</ZenStudioTitle>
-       <YTVideo>
-         <iframe width="800" height="480" src="https://www.youtube.com/embed/2wYtJwDkKIk?si=oNif7cIBLopPzclP?autoplay=1&loop=1" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>      
-       </YTVideo>
-       <AudioCard1>
-        <div style="align: center, min-width: 800px"><audio controls src="/sound-1.mp3" loop /></div>
-       </AudioCard1>
-       <AudioCard>
-        <div style="align: center, min-width: 800px"><audio controls src="/sound.mp3" loop /></div>
-       </AudioCard>
-      </ZenStudio>
-
       {/* Workflows */} 
       <WorkFlowSection />
 
@@ -228,8 +228,25 @@ export const VolcanoView: Component = () => {
         <SettingItem>
         </SettingItem>
       </SettingsContainer>
+
       <ImageBgLine />
-     <ImageBgFooter />
+
+       <ZenStudio>
+       <ZenStudioTitle>{t("zenstudio")}</ZenStudioTitle>
+       <YTVideo>
+         <iframe width="800" height="480" src="https://www.youtube.com/embed/2wYtJwDkKIk?si=oNif7cIBLopPzclP?autoplay=1&loop=1" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>      
+       </YTVideo>
+       <AudioCard1>
+        <div style="align: center, min-width: 800px"><audio controls src="/sound-1.mp3" loop /></div>
+       </AudioCard1>
+       <AudioCard>
+        <div style="align: center, min-width: 800px"><audio controls src="/sound.mp3" loop /></div>
+       </AudioCard>
+       </ZenStudio>
+       <FishTank>
+	<iframe width="800" height="480" src="https://www.youtube.com/embed/1zcIUk66HX4?si=_CRmoZZ-756DNcyJ" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+       </FishTank>
+      <ImageBgFooter />
     </>
   );
 };
