@@ -1,23 +1,26 @@
-import { createEffect, createSignal, onCleanup } from "solid-js";
+import { createEffect, createSignal } from "solid-js";
 import {
   convertBLEToUint16,
   convertToUInt8BLE,
 } from "../../utils/bluetoothUtils";
 import { CraftyCharacteristicUUIDs } from "../../utils/uuids";
-import {
-  createCharateristicWithEventListener,
-  detachEventListener,
-} from "../../utils/characteristic";
+import { createCharateristic } from "../../utils/characteristic";
 import { useBluetooth } from "../../provider/BluetoothProvider";
 import { useWriteToCharacteristic } from "../volcano/useWriteToCharacteristic";
 
-export const useSystemStatus = () => {
+interface UseSystemStatusProps {
+  isOldCrafty?: () => boolean;
+}
+
+export const useSystemStatus = (props?: UseSystemStatusProps) => {
   const [getSystemStatus, setSystemStatus] = createSignal(0);
   const [getAkkuStatus, setAkkuStatus] = createSignal(0);
   const [getAkkuStatus2, setAkkuStatus2] = createSignal(0);
-  const { getCraftyControlService, getCharacteristics, setCharacteristics } =
+  const [isInitialized, setIsInitialized] = createSignal(false);
+  const { getCraftyStatusService, setCharacteristics } =
     useBluetooth();
   const { writeValueToCharacteristic } = useWriteToCharacteristic();
+  const isOldDevice = props?.isOldCrafty || (() => false);
 
   const handleSystemStatus = (value: DataView) => {
     const status = convertBLEToUint16(value);
@@ -35,61 +38,73 @@ export const useSystemStatus = () => {
   };
 
   const handleCharacteristics = async () => {
-    const service = getCraftyControlService();
-    if (!service) return;
+    // systemStatus (0x83), akkuStatus (0x63, 0x73), factoryReset (0x1d3) are in Crafty3 (Status service)
+    const service = getCraftyStatusService();
+    if (!service || isInitialized()) return;
 
-    const systemStatusCharacteristic =
-      await createCharateristicWithEventListener(
+    // System status features only available on Crafty+ (firmware >= 2.51)
+    if (isOldDevice()) {
+      console.log("System status features not available on old Crafty");
+      setIsInitialized(true);
+      return;
+    }
+
+    console.log(`useSystemStatus: Starting initialization (isOldCrafty: ${isOldDevice()})`);
+
+    try {
+      // NOTE: These characteristics do NOT support notifications - use createCharateristic (read-only)
+      const systemStatusCharacteristic = await createCharateristic(
         service,
         CraftyCharacteristicUUIDs.systemStatusCharacteristic,
         handleSystemStatus
       );
-    if (!systemStatusCharacteristic) {
-      return Promise.reject("systemStatusCharacteristic not found");
-    }
-    setCharacteristics((prev) => ({
-      ...prev,
-      systemStatusCharacteristic,
-    }));
+      if (systemStatusCharacteristic) {
+        setCharacteristics((prev) => ({
+          ...prev,
+          systemStatusCharacteristic,
+        }));
+      }
 
-    const akkuStatusCharacteristic = await createCharateristicWithEventListener(
-      service,
-      CraftyCharacteristicUUIDs.akkuStatusCharacteristic,
-      handleAkkuStatus
-    );
-    if (!akkuStatusCharacteristic) {
-      return Promise.reject("akkuStatusCharacteristic not found");
-    }
-    setCharacteristics((prev) => ({
-      ...prev,
-      akkuStatusCharacteristic,
-    }));
+      const akkuStatusCharacteristic = await createCharateristic(
+        service,
+        CraftyCharacteristicUUIDs.akkuStatusCharacteristic,
+        handleAkkuStatus
+      );
+      if (akkuStatusCharacteristic) {
+        setCharacteristics((prev) => ({
+          ...prev,
+          akkuStatusCharacteristic,
+        }));
+      }
 
-    const akkuStatusCharacteristic2 =
-      await createCharateristicWithEventListener(
+      const akkuStatusCharacteristic2 = await createCharateristic(
         service,
         CraftyCharacteristicUUIDs.akkuStatusCharacteristic2,
         handleAkkuStatus2
       );
-    if (!akkuStatusCharacteristic2) {
-      return Promise.reject("akkuStatusCharacteristic2 not found");
-    }
-    setCharacteristics((prev) => ({
-      ...prev,
-      akkuStatusCharacteristic2,
-    }));
+      if (akkuStatusCharacteristic2) {
+        setCharacteristics((prev) => ({
+          ...prev,
+          akkuStatusCharacteristic2,
+        }));
+      }
 
-    // factoryResetCharacteristic is write-only
-    const factoryResetCharacteristic = await service.getCharacteristic(
-      CraftyCharacteristicUUIDs.factoryResetCharacteristic
-    );
-    if (!factoryResetCharacteristic) {
-      return Promise.reject("factoryResetCharacteristic not found");
+      // factoryResetCharacteristic is write-only
+      const factoryResetCharacteristic = await service.getCharacteristic(
+        CraftyCharacteristicUUIDs.factoryResetCharacteristic
+      );
+      if (factoryResetCharacteristic) {
+        setCharacteristics((prev) => ({
+          ...prev,
+          factoryResetCharacteristic,
+        }));
+      }
+    } catch (error) {
+      console.warn("System status features not fully available", error);
     }
-    setCharacteristics((prev) => ({
-      ...prev,
-      factoryResetCharacteristic,
-    }));
+    
+    setIsInitialized(true);
+    console.log("useSystemStatus: Initialization complete");
   };
 
   const factoryReset = async () => {
@@ -101,25 +116,19 @@ export const useSystemStatus = () => {
   };
 
   createEffect(() => {
-    handleCharacteristics();
+    // Wait for firmware detection before initializing
+    // This ensures isOldCrafty is set correctly
+    const oldDevice = isOldDevice();
+    const service = getCraftyStatusService();
+    
+    // Only proceed if service is available
+    if (service) {
+      console.log(`useSystemStatus: Initializing (isOldCrafty: ${oldDevice})`);
+      handleCharacteristics();
+    }
   });
 
-  onCleanup(() => {
-    const {
-      systemStatusCharacteristic,
-      akkuStatusCharacteristic,
-      akkuStatusCharacteristic2,
-    } = getCharacteristics();
-    if (systemStatusCharacteristic) {
-      detachEventListener(systemStatusCharacteristic, handleSystemStatus);
-    }
-    if (akkuStatusCharacteristic) {
-      detachEventListener(akkuStatusCharacteristic, handleAkkuStatus);
-    }
-    if (akkuStatusCharacteristic2) {
-      detachEventListener(akkuStatusCharacteristic2, handleAkkuStatus2);
-    }
-  });
+  // No onCleanup needed - system status characteristics don't use notifications
 
   return {
     getSystemStatus,

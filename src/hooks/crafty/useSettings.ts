@@ -6,18 +6,25 @@ import {
 import { CraftyCharacteristicUUIDs } from "../../utils/uuids";
 import {
   createCharateristicWithEventListener,
+  createCharateristic,
   detachEventListener,
 } from "../../utils/characteristic";
 import { useBluetooth } from "../../provider/BluetoothProvider";
 import { useWriteToCharacteristic } from "../volcano/useWriteToCharacteristic";
 
-export const useSettings = () => {
+interface UseSettingsProps {
+  isOldCrafty?: () => boolean;
+}
+
+export const useSettings = (props?: UseSettingsProps) => {
   const [getLedBrightness, setLedBrightness] = createSignal(0);
   const [getAutoOffCountdown, setAutoOffCountdown] = createSignal(0);
   const [getAutoOffCurrentValue, setAutoOffCurrentValue] = createSignal(0);
+  const [isInitialized, setIsInitialized] = createSignal(false);
   const { getCraftyControlService, getCharacteristics, setCharacteristics } =
     useBluetooth();
   const { writeValueToCharacteristic } = useWriteToCharacteristic();
+  const isOldDevice = props?.isOldCrafty || (() => false);
 
   const handleLedBrightness = (value: DataView) => {
     const brightness = convertBLEToUint16(value);
@@ -36,9 +43,13 @@ export const useSettings = () => {
 
   const handleCharacteristics = async () => {
     const service = getCraftyControlService();
-    if (!service) return;
+    if (!service || isInitialized()) return;
 
-    const ledBrightness = await createCharateristicWithEventListener(
+    console.log(`useSettings: Starting initialization (isOldCrafty: ${isOldDevice()})`);
+
+    // LED brightness is available on all Crafty devices
+    // NOTE: This characteristic does NOT support notifications - use createCharateristic (read-only)
+    const ledBrightness = await createCharateristic(
       service,
       CraftyCharacteristicUUIDs.ledBrightness,
       handleLedBrightness
@@ -51,31 +62,41 @@ export const useSettings = () => {
       ledBrightness,
     }));
 
-    const autoOffCountdown = await createCharateristicWithEventListener(
-      service,
-      CraftyCharacteristicUUIDs.autoOffCountdown,
-      handleAutoOffCountdown
-    );
-    if (!autoOffCountdown) {
-      return Promise.reject("autoOffCountdownCharacteristic not found");
-    }
-    setCharacteristics((prev) => ({
-      ...prev,
-      autoOffCountdown,
-    }));
+    // Auto-off features only available on Crafty+ (firmware >= 2.51)
+    if (!isOldDevice()) {
+      try {
+        // autoOffCountdown does NOT support notifications - use createCharateristic (read-only)
+        const autoOffCountdown = await createCharateristic(
+          service,
+          CraftyCharacteristicUUIDs.autoOffCountdown,
+          handleAutoOffCountdown
+        );
+        if (autoOffCountdown) {
+          setCharacteristics((prev) => ({
+            ...prev,
+            autoOffCountdown,
+          }));
+        }
 
-    const autoOffCurrentValue = await createCharateristicWithEventListener(
-      service,
-      CraftyCharacteristicUUIDs.autoOffCurrentValue,
-      handleAutoOffCurrentValue
-    );
-    if (!autoOffCurrentValue) {
-      return Promise.reject("autoOffCurrentValueCharacteristic not found");
+        // autoOffCurrentValue DOES support notifications
+        const autoOffCurrentValue = await createCharateristicWithEventListener(
+          service,
+          CraftyCharacteristicUUIDs.autoOffCurrentValue,
+          handleAutoOffCurrentValue
+        );
+        if (autoOffCurrentValue) {
+          setCharacteristics((prev) => ({
+            ...prev,
+            autoOffCurrentValue,
+          }));
+        }
+      } catch (error) {
+        console.warn("Auto-off features not available (old Crafty)", error);
+      }
     }
-    setCharacteristics((prev) => ({
-      ...prev,
-      autoOffCurrentValue,
-    }));
+    
+    setIsInitialized(true);
+    console.log("useSettings: Initialization complete");
   };
 
   const setLedBrightnessValue = async (value: number) => {
@@ -95,18 +116,22 @@ export const useSettings = () => {
   };
 
   createEffect(() => {
-    handleCharacteristics();
+    // Wait for firmware detection before initializing
+    // This ensures isOldCrafty is set correctly
+    const oldDevice = isOldDevice();
+    const service = getCraftyControlService();
+    
+    // Only proceed if service is available
+    if (service) {
+      console.log(`useSettings: Initializing (isOldCrafty: ${oldDevice})`);
+      handleCharacteristics();
+    }
   });
 
   onCleanup(() => {
-    const { ledBrightness, autoOffCountdown, autoOffCurrentValue } =
-      getCharacteristics();
-    if (ledBrightness) {
-      detachEventListener(ledBrightness, handleLedBrightness);
-    }
-    if (autoOffCountdown) {
-      detachEventListener(autoOffCountdown, handleAutoOffCountdown);
-    }
+    const { autoOffCurrentValue } = getCharacteristics();
+    // Only autoOffCurrentValue uses notifications
+    // ledBrightness and autoOffCountdown are read-only (no notifications)
     if (autoOffCurrentValue) {
       detachEventListener(autoOffCurrentValue, handleAutoOffCurrentValue);
     }

@@ -11,21 +11,35 @@ import {
 import { useBluetooth } from "../../provider/BluetoothProvider";
 import { useWriteToCharacteristic } from "../volcano/useWriteToCharacteristic";
 
-export const usePower = () => {
+interface UsePowerProps {
+  isOldCrafty?: () => boolean;
+}
+
+export const usePower = (props?: UsePowerProps) => {
   const [getPowerChanged, setPowerChanged] = createSignal(0);
+  const [getBatteryPercent, setBatteryPercent] = createSignal(0);
+  const [isInitialized, setIsInitialized] = createSignal(false);
   const { getCraftyControlService, getCharacteristics, setCharacteristics } =
     useBluetooth();
   const { writeValueToCharacteristic } = useWriteToCharacteristic();
+  const isOldDevice = props?.isOldCrafty || (() => false);
 
   const handlePowerChanged = (value: DataView) => {
     const power = convertBLEToUint16(value);
     setPowerChanged(power);
+    // The powerChanged characteristic (0x41) contains battery percentage
+    // This is available on all Crafty devices (both old and new)
+    setBatteryPercent(power);
+    console.log("Crafty Power: Battery percentage updated to", power);
   };
 
   const handleCharacteristics = async () => {
     const service = getCraftyControlService();
-    if (!service) return;
+    if (!service || isInitialized()) return;
 
+    console.log(`usePower: Starting initialization (isOldCrafty: ${isOldDevice()})`);
+
+    // Power characteristic is available on all Crafty devices
     const powerChanged = await createCharateristicWithEventListener(
       service,
       CraftyCharacteristicUUIDs.powerChanged,
@@ -39,28 +53,35 @@ export const usePower = () => {
       powerChanged,
     }));
 
-    // heaterOn and heaterOff are write-only, no listeners needed
-    const heaterOn = await service.getCharacteristic(
-      CraftyCharacteristicUUIDs.heaterOn
-    );
-    if (!heaterOn) {
-      return Promise.reject("heaterOnCharacteristic not found");
-    }
-    setCharacteristics((prev) => ({
-      ...prev,
-      heaterOn,
-    }));
+    // heaterOn and heaterOff only available on Crafty+ (firmware >= 2.51)
+    if (!isOldDevice()) {
+      try {
+        const heaterOn = await service.getCharacteristic(
+          CraftyCharacteristicUUIDs.heaterOn
+        );
+        if (heaterOn) {
+          setCharacteristics((prev) => ({
+            ...prev,
+            heaterOn,
+          }));
+        }
 
-    const heaterOff = await service.getCharacteristic(
-      CraftyCharacteristicUUIDs.heaterOff
-    );
-    if (!heaterOff) {
-      return Promise.reject("heaterOffCharacteristic not found");
+        const heaterOff = await service.getCharacteristic(
+          CraftyCharacteristicUUIDs.heaterOff
+        );
+        if (heaterOff) {
+          setCharacteristics((prev) => ({
+            ...prev,
+            heaterOff,
+          }));
+        }
+      } catch (error) {
+        console.warn("Heater on/off controls not available (old Crafty)", error);
+      }
     }
-    setCharacteristics((prev) => ({
-      ...prev,
-      heaterOff,
-    }));
+    
+    setIsInitialized(true);
+    console.log("usePower: Initialization complete");
   };
 
   const turnHeaterOn = async () => {
@@ -72,7 +93,16 @@ export const usePower = () => {
   };
 
   createEffect(() => {
-    handleCharacteristics();
+    // Wait for firmware detection before initializing
+    // This ensures isOldCrafty is set correctly
+    const oldDevice = isOldDevice();
+    const service = getCraftyControlService();
+    
+    // Only proceed if service is available
+    if (service) {
+      console.log(`usePower: Initializing (isOldCrafty: ${oldDevice})`);
+      handleCharacteristics();
+    }
   });
 
   onCleanup(() => {
@@ -84,6 +114,7 @@ export const usePower = () => {
 
   return {
     getPowerChanged,
+    getBatteryPercent,
     turnHeaterOn,
     turnHeaterOff,
     handleCharacteristics,

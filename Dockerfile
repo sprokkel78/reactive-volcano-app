@@ -1,35 +1,19 @@
-# Use lightweight Apache image
-FROM httpd:2.4-alpine
+FROM node:18-alpine AS build
 
-# Remove default Apache content
-RUN rm -rf /usr/local/apache2/htdocs/*
+WORKDIR /app
 
-# Enable mod_rewrite
-RUN sed -i \
-    -e 's/#LoadModule rewrite_module/LoadModule rewrite_module/' \
-    /usr/local/apache2/conf/httpd.conf
+COPY package*.json ./
 
-# Append proper Directory block
-RUN cat << 'EOF' >> /usr/local/apache2/conf/httpd.conf
+RUN npm ci
 
-<Directory "/usr/local/apache2/htdocs">
-    AllowOverride All
-    Require all granted
+COPY . .
 
-    RewriteEngine On
-    RewriteCond %{REQUEST_FILENAME} -f [OR]
-    RewriteCond %{REQUEST_FILENAME} -d
-    RewriteRule ^ - [L]
+RUN npm run build
 
-    RewriteRule ^ /index.html [L]
-</Directory>
+FROM nginx:alpine
 
-EOF
-# Copy your locally built dist/ folder into Apache root
-COPY dist/ /usr/local/apache2/htdocs/
+COPY --from=build /app/dist /usr/share/nginx/html
 
-# Expose port 80
 EXPOSE 80
 
-# Start Apache in the foreground
-CMD ["httpd-foreground"]
+CMD ["nginx", "-g", "daemon off;"]

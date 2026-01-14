@@ -1,17 +1,20 @@
-import { createEffect, createSignal, onCleanup } from "solid-js";
+import { createEffect, createSignal } from "solid-js";
 import { convertBLEToUint16 } from "../../utils/bluetoothUtils";
 import { CraftyCharacteristicUUIDs } from "../../utils/uuids";
-import {
-  createCharateristicWithEventListener,
-  detachEventListener,
-} from "../../utils/characteristic";
+import { createCharateristic } from "../../utils/characteristic";
 import { useBluetooth } from "../../provider/BluetoothProvider";
 
-export const useUsageTime = () => {
+interface UseUsageTimeProps {
+  isOldCrafty?: () => boolean;
+}
+
+export const useUsageTime = (props?: UseUsageTimeProps) => {
   const [getUseHours, setUseHours] = createSignal(0);
   const [getUseMinutes, setUseMinutes] = createSignal(0);
-  const { getCraftyControlService, getCharacteristics, setCharacteristics } =
+  const [isInitialized, setIsInitialized] = createSignal(false);
+  const { getCraftyStatusService, setCharacteristics } =
     useBluetooth();
+  const isOldDevice = props?.isOldCrafty || (() => false);
 
   const handleUseHours = (value: DataView) => {
     const hours = convertBLEToUint16(value);
@@ -24,10 +27,15 @@ export const useUsageTime = () => {
   };
 
   const handleCharacteristics = async () => {
-    const service = getCraftyControlService();
-    if (!service) return;
+    // useHours (0x23) and useMinutes (0x1e3) are in Crafty3 (Status service)
+    const service = getCraftyStatusService();
+    if (!service || isInitialized()) return;
 
-    const useHoursCharacteristic = await createCharateristicWithEventListener(
+    console.log(`useUsageTime: Starting initialization (isOldCrafty: ${isOldDevice()})`);
+
+    // Hours are available on all Crafty devices
+    // NOTE: This characteristic does NOT support notifications - use createCharateristic (read-only)
+    const useHoursCharacteristic = await createCharateristic(
       service,
       CraftyCharacteristicUUIDs.useHoursCharacteristic,
       handleUseHours
@@ -40,34 +48,45 @@ export const useUsageTime = () => {
       useHoursCharacteristic,
     }));
 
-    const useMinutesCharacteristic = await createCharateristicWithEventListener(
-      service,
-      CraftyCharacteristicUUIDs.useMinutesCharacteristic,
-      handleUseMinutes
-    );
-    if (!useMinutesCharacteristic) {
-      return Promise.reject("useMinutesCharacteristic not found");
+    // Minutes only available on Crafty+ (firmware >= 2.51)
+    // NOTE: This characteristic does NOT support notifications - use createCharateristic (read-only)
+    if (!isOldDevice()) {
+      try {
+        const useMinutesCharacteristic = await createCharateristic(
+          service,
+          CraftyCharacteristicUUIDs.useMinutesCharacteristic,
+          handleUseMinutes
+        );
+        if (useMinutesCharacteristic) {
+          setCharacteristics((prev) => ({
+            ...prev,
+            useMinutesCharacteristic,
+          }));
+        }
+      } catch (error) {
+        console.warn("Usage minutes not available (old Crafty)", error);
+        // Old Crafty only provides hours, so minutes remain 0
+      }
     }
-    setCharacteristics((prev) => ({
-      ...prev,
-      useMinutesCharacteristic,
-    }));
+    
+    setIsInitialized(true);
+    console.log("useUsageTime: Initialization complete");
   };
 
   createEffect(() => {
-    handleCharacteristics();
+    // Wait for firmware detection before initializing
+    // This ensures isOldCrafty is set correctly
+    const oldDevice = isOldDevice();
+    const service = getCraftyStatusService();
+    
+    // Only proceed if service is available
+    if (service) {
+      console.log(`useUsageTime: Initializing (isOldCrafty: ${oldDevice})`);
+      handleCharacteristics();
+    }
   });
 
-  onCleanup(() => {
-    const { useHoursCharacteristic, useMinutesCharacteristic } =
-      getCharacteristics();
-    if (useHoursCharacteristic) {
-      detachEventListener(useHoursCharacteristic, handleUseHours);
-    }
-    if (useMinutesCharacteristic) {
-      detachEventListener(useMinutesCharacteristic, handleUseMinutes);
-    }
-  });
+  // No onCleanup needed - useHours and useMinutes don't use notifications
 
   return {
     getUseHours,

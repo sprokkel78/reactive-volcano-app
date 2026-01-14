@@ -8,12 +8,13 @@ import { styled } from "solid-styled-components";
 import { useTranslations } from "../../../i18n/utils";
 
 const Container = styled("div")`
-  max-width: 800px;
+  max-width: 600px;
   margin: 20px auto;
   padding: 20px;
 `;
 
 const Card = styled("div")`
+  background: var(--secondary-bg);
   border-radius: 16px;
   padding: 24px;
   border: 1px solid var(--border-color);
@@ -194,7 +195,7 @@ export const WorkflowList = () => {
                     <StepActions>
                       <IconButton
                         onClick={() =>
-                          navigate(
+                          workflowListId && navigate(
                             buildRoute.workflowForm(
                               workflowListId,
                               workflowItem.id
@@ -206,7 +207,7 @@ export const WorkflowList = () => {
                       </IconButton>
                       <IconButton
                         onClick={() =>
-                          deleteWorkflowStepFromList(
+                          workflowListId && deleteWorkflowStepFromList(
                             workflowListId,
                             workflowItem.id
                           )
@@ -232,7 +233,9 @@ export const WorkflowList = () => {
           </StyledButton>
           <StyledButton
             onClick={() => {
-              updateWorkflowStepsInList(workflowListId, workflowSteps());
+              if (workflowListId) {
+                updateWorkflowStepsInList(workflowListId, workflowSteps());
+              }
               navigate(buildRoute.volcanoRoot());
             }}
           >

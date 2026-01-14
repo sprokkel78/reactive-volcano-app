@@ -56,6 +56,24 @@ const FishTank = styled("div")`
 
 `;
 
+const AudioCard2 = styled("div")`
+  min-width: 750px;
+  min-height: 30px;
+  padding: 20px;
+  display: flex;
+  align: center;
+  justify-content: center; /* center the audio player */
+  background-color: var(--card-bg-color, transparent); /* optional background */
+
+  audio {
+    width: 800px;       /* fixed width */
+    max-width: 100%;    /* responsive fallback */
+    background-color: black;
+    color: white;
+    border-radius: 8px;
+  }
+`;
+
 const AudioCard1 = styled("div")`
   min-width: 750px;
   min-height: 30px;
@@ -242,6 +260,9 @@ export const VolcanoView: Component = () => {
        <AudioCard>
         <div style="align: center, min-width: 800px"><audio controls src="/sound.mp3" loop /></div>
        </AudioCard>
+       <AudioCard2>
+        <div style="align: center, min-width: 800px"><audio controls src="/sound-2.mp3" loop /></div>
+       </AudioCard2>
        </ZenStudio>
        <FishTank>
 	<iframe width="800" height="480" src="https://www.youtube.com/embed/1zcIUk66HX4?si=_CRmoZZ-756DNcyJ" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>

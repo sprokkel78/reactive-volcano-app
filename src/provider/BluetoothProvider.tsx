@@ -28,6 +28,7 @@ type BluetoothProviderProps = {
 };
 
 const createBluetoothMethods = () => {
+  const [device, setDevice] = createSignal<BluetoothDevice>();
   const [server, setServer] = createSignal<BluetoothRemoteGATTServer>();
 
   // Volcano services
@@ -46,6 +47,14 @@ const createBluetoothMethods = () => {
     createSignal<BluetoothRemoteGATTService>();
   const [getCraftyStatusService, setCraftyStatusService] =
     createSignal<BluetoothRemoteGATTService>();
+
+  const isIOS = () => {
+    return (
+      navigator.userAgent.includes("iPhone") ||
+      navigator.userAgent.includes("iPad") ||
+      navigator.userAgent.includes("WebBLE/1")
+    );
+  };
 
   const [getCharacteristics, setCharacteristics] =
     createSignal<DeviceCharacteristics>({});
@@ -72,6 +81,22 @@ const createBluetoothMethods = () => {
     return DeviceType.CRAFTY;
   };
 
+  const handleDisconnect = (event: Event) => {
+    console.log("🔌 Device disconnected unexpectedly:", event);
+    // Clean up state after disconnect
+    setConnectionState(ConnectionState.NOT_CONNECTED);
+    setVolcanoStateService(undefined);
+    setVolcanoControlService(undefined);
+    setVentyVeazyService(undefined);
+    setCraftyDeviceInfoService(undefined);
+    setCraftyControlService(undefined);
+    setCraftyStatusService(undefined);
+    setCharacteristics({});
+    setDeviceInfo({ type: DeviceType.UNKNOWN, name: "" });
+    setServer(undefined);
+    setDevice(undefined);
+  };
+
   const disconnect = async () => {
     const characteristics = getCharacteristics();
     if (characteristics.control) {
@@ -80,6 +105,19 @@ const createBluetoothMethods = () => {
         await characteristics.control.stopNotifications();
       } catch (error) {
         console.error("Error stopping notifications:", error);
+      }
+    }
+
+    // Remove event listener before disconnecting
+    const currentDevice = device();
+    if (currentDevice) {
+      try {
+        currentDevice.removeEventListener(
+          "gattserverdisconnected",
+          handleDisconnect
+        );
+      } catch (error) {
+        console.error("Error removing disconnect listener:", error);
       }
     }
 
@@ -106,6 +144,7 @@ const createBluetoothMethods = () => {
     setCharacteristics({});
     setDeviceInfo({ type: DeviceType.UNKNOWN, name: "" });
     setServer(undefined);
+    setDevice(undefined);
   };
 
   const connectToVeazyVenty = async (server: BluetoothRemoteGATTServer) => {
@@ -121,11 +160,10 @@ const createBluetoothMethods = () => {
           VentyVeazyCharacteristicUUIDs.control
         );
 
-        // First: Activate notifications (like legacy app)
+        // First: Activate notifications
         await controlCharacteristic.startNotifications();
 
-        // Then: Send initialization commands immediately (like legacy app)
-        // This makes the device start sending data
+        // Then: Send initialization commands
         await bluetoothQueue.add(async () => {
           // CMD 0x02 - Reset/Initialize
           const resetBuffer = new ArrayBuffer(20);
@@ -145,7 +183,7 @@ const createBluetoothMethods = () => {
           basicView.setUint8(0, 0x01);
           await controlCharacteristic.writeValue(basicBuffer);
 
-          // CMD 0x04 - Extended data request (important!)
+          // CMD 0x04 - Extended data request
           const extendedBuffer = new ArrayBuffer(20);
           const extendedView = new DataView(extendedBuffer);
           extendedView.setUint8(0, 0x04);
@@ -202,6 +240,12 @@ const createBluetoothMethods = () => {
       throw new Error("Device does not support GATT");
     }
 
+    // Set device reference first
+    setDevice(device);
+
+    // Add disconnect event listener (critical for handling unexpected disconnects!)
+    device.addEventListener("gattserverdisconnected", handleDisconnect);
+
     // Set device info
     const deviceName = device.name || "";
     const actualDeviceType = detectDeviceType(deviceName);
@@ -228,22 +272,32 @@ const createBluetoothMethods = () => {
   };
 
   const getDeviceFilters = () => {
-    const baseFilters = [
-      { namePrefix: "STORZ&BICKEL" },
-      { namePrefix: "Storz&Bickel" },
-      { namePrefix: "S&B" },
-      {
-        services: [
-          ServiceUUIDs.Crafty1,
-          ServiceUUIDs.Crafty2,
-          ServiceUUIDs.Crafty3,
-        ],
-      }, // Crafty services
-      { services: [ServiceUUIDs.DeviceState, ServiceUUIDs.DeviceControl] }, // Volcano services
-      { services: [ServiceUUIDs.Primary] }, // Veazy/Venty service
-    ];
+    if (isIOS()) {
+      // On iOS, only use namePrefix filters as services are not supported
+      return [
+        { namePrefix: "STORZ&BICKEL" },
+        { namePrefix: "Storz&Bickel" },
+        { namePrefix: "S&B" },
+      ];
+    } else {
+      // On Android/Desktop, use both namePrefix and services
+      const baseFilters = [
+        { namePrefix: "STORZ&BICKEL" },
+        { namePrefix: "Storz&Bickel" },
+        { namePrefix: "S&B" },
+        {
+          services: [
+            ServiceUUIDs.Crafty1,
+            ServiceUUIDs.Crafty2,
+            ServiceUUIDs.Crafty3,
+          ],
+        }, // Crafty services
+        { services: [ServiceUUIDs.DeviceState, ServiceUUIDs.DeviceControl] }, // Volcano services
+        { services: [ServiceUUIDs.Primary] }, // Veazy/Venty service
+      ];
 
-    return baseFilters;
+      return baseFilters;
+    }
   };
 
   const getOptionalServices = () => [
@@ -268,6 +322,17 @@ const createBluetoothMethods = () => {
     } catch (error) {
       console.error("Connection failed:", error);
       setConnectionState(ConnectionState.CONNECTION_FAILED);
+      
+      // Clean up device reference on connection failure
+      const currentDevice = device();
+      if (currentDevice) {
+        currentDevice.removeEventListener(
+          "gattserverdisconnected",
+          handleDisconnect
+        );
+        setDevice(undefined);
+      }
+      
       if (error instanceof Error) alert(error.message);
     }
   };

@@ -1,4 +1,3 @@
-
 import { Component, createEffect, createMemo, createSignal } from "solid-js";
 import { Slider } from "../../Slider";
 import { useTranslations } from "../../../i18n/utils";
@@ -10,12 +9,13 @@ import { styled } from "solid-styled-components";
 import { FiSave, FiX } from "solid-icons/fi";
 
 const Container = styled("div")`
-  max-width: 800px;
+  max-width: 600px;
   margin: 20px auto;
   padding: 20px;
 `;
 
 const Card = styled("div")`
+  background: var(--secondary-bg);
   border-radius: 16px;
   padding: 24px;
   border: 1px solid var(--border-color);
@@ -86,6 +86,7 @@ export const WorkflowForm: Component = () => {
 
   const handleSubmit = (event: Event) => {
     event.preventDefault();
+    if (!workflowListId || !workflowStepId) return;
     editWorkflowStepInList(workflowListId, workflowStepId, {
       id: workflowStepId,
       temperature: temperature(),
@@ -124,16 +125,16 @@ export const WorkflowForm: Component = () => {
             <Slider
               value={pumpTime()}
               label={`${t("pumpTime")}: ${pumpTime()} ${t("sec")}`}
-              min={30}
+              min={0}
               step={5}
-              max={180}
+              max={60}
               onInput={(value) => setPumpTime(value)}
             />
           </SliderSection>
           <ButtonGroup>
             <StyledButton
               type="button"
-              onClick={() => navigate(buildRoute.workflowList(workflowListId))}
+              onClick={() => workflowListId && navigate(buildRoute.workflowList(workflowListId))}
             >
               <FiX size={20} />
               {t("cancel")}

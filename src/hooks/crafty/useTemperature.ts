@@ -6,10 +6,12 @@ import {
 import { CraftyCharacteristicUUIDs } from "../../utils/uuids";
 import {
   createCharateristicWithEventListener,
+  createCharateristic,
   detachEventListener,
 } from "../../utils/characteristic";
 import { useBluetooth } from "../../provider/BluetoothProvider";
 import { useWriteToCharacteristic } from "../volcano/useWriteToCharacteristic";
+import { bluetoothQueue } from "../../utils/bluetoothQueue";
 
 export const useTemperature = () => {
   const [getTargetTemperature, setTargetTemperature] = createSignal(0);
@@ -48,7 +50,9 @@ export const useTemperature = () => {
     }
     console.log("Crafty Temperature: Setting up temperature characteristics");
 
-    const targetTemperature = await createCharateristicWithEventListener(
+    // writeTemp characteristic does NOT support notifications on old Crafty devices
+    // Use createCharateristic (read only) instead of createCharateristicWithEventListener
+    const targetTemperature = await createCharateristic(
       service,
       CraftyCharacteristicUUIDs.writeTemp,
       handleTargetTemperature
@@ -78,7 +82,9 @@ export const useTemperature = () => {
       currTemperatureChanged: currentTemperature,
     }));
 
-    const boostTemperature = await createCharateristicWithEventListener(
+    // writeBoostTemp characteristic does NOT support notifications on old Crafty devices
+    // Use createCharateristic (read only) instead of createCharateristicWithEventListener
+    const boostTemperature = await createCharateristic(
       service,
       CraftyCharacteristicUUIDs.writeBoostTemp,
       handleBoostTemperature
@@ -95,21 +101,78 @@ export const useTemperature = () => {
   };
 
   const setTemperature = async (value: number) => {
-    console.log("Crafty Temperature: Setting target temperature to", value);
-    await writeValueToCharacteristic(
-      "writeTemp",
-      value * 10,
-      convertToUInt16BLE
-    );
+    // Clamp value to valid range (40-210°C)
+    const clampedValue = Math.max(40, Math.min(210, value));
+    console.log("Crafty Temperature: Setting target temperature to", clampedValue);
+    
+    // Update local state immediately for responsive UI
+    setTargetTemperature(clampedValue);
+    
+    try {
+      await writeValueToCharacteristic(
+        "writeTemp",
+        clampedValue * 10,
+        convertToUInt16BLE
+      );
+      
+      // Re-read the value from device to confirm
+      const characteristics = getCharacteristics();
+      const writeTemp = characteristics.writeTemp;
+      if (writeTemp) {
+        const confirmedValue = await bluetoothQueue.add(() => writeTemp.readValue());
+        if (confirmedValue) {
+          const confirmedTemp = Math.round(convertBLEToUint16(confirmedValue) / 10.0);
+          console.log("Crafty Temperature: Confirmed target temperature", confirmedTemp);
+          setTargetTemperature(confirmedTemp);
+        }
+      }
+    } catch (error) {
+      console.error("Crafty Temperature: Failed to set temperature", error);
+      // Revert to current value on error
+      const characteristics = getCharacteristics();
+      const writeTemp = characteristics.writeTemp;
+      if (writeTemp) {
+        try {
+          const currentValue = await bluetoothQueue.add(() => writeTemp.readValue());
+          if (currentValue) {
+            setTargetTemperature(Math.round(convertBLEToUint16(currentValue) / 10.0));
+          }
+        } catch {
+          // Ignore read error during recovery
+        }
+      }
+    }
   };
 
   const setBoostTemp = async (value: number) => {
-    console.log("Crafty Temperature: Setting boost temperature to", value);
-    await writeValueToCharacteristic(
-      "writeBoostTemp",
-      value * 10,
-      convertToUInt16BLE
-    );
+    // Clamp value to valid range (0-30)
+    const clampedValue = Math.max(0, Math.min(30, value));
+    console.log("Crafty Temperature: Setting boost temperature to", clampedValue);
+    
+    // Update local state immediately for responsive UI
+    setBoostTemperature(clampedValue);
+    
+    try {
+      await writeValueToCharacteristic(
+        "writeBoostTemp",
+        clampedValue * 10,
+        convertToUInt16BLE
+      );
+      
+      // Re-read the value from device to confirm
+      const characteristics = getCharacteristics();
+      const writeBoostTemp = characteristics.writeBoostTemp;
+      if (writeBoostTemp) {
+        const confirmedValue = await bluetoothQueue.add(() => writeBoostTemp.readValue());
+        if (confirmedValue) {
+          const confirmedTemp = Math.round(convertBLEToUint16(confirmedValue) / 10.0);
+          console.log("Crafty Temperature: Confirmed boost temperature", confirmedTemp);
+          setBoostTemperature(confirmedTemp);
+        }
+      }
+    } catch (error) {
+      console.error("Crafty Temperature: Failed to set boost temperature", error);
+    }
   };
 
   createEffect(() => {
@@ -117,16 +180,11 @@ export const useTemperature = () => {
   });
 
   onCleanup(() => {
-    const { writeTemp, currTemperatureChanged, writeBoostTemp } =
-      getCharacteristics();
-    if (writeTemp) {
-      detachEventListener(writeTemp, handleTargetTemperature);
-    }
+    const { currTemperatureChanged } = getCharacteristics();
+    // Only cleanup currTemperatureChanged which uses notifications
+    // writeTemp and writeBoostTemp don't use notifications
     if (currTemperatureChanged) {
       detachEventListener(currTemperatureChanged, handleCurrentTemperature);
-    }
-    if (writeBoostTemp) {
-      detachEventListener(writeBoostTemp, handleBoostTemperature);
     }
   });
 
