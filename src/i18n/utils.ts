@@ -50,7 +50,7 @@ export const ui = {
     connectingToDevice: "Connecting to device...",
     connectYourDevice: "Connect Storz & Bickle Device",
     appSupportsDevices:
-      "This app supports Volcano Hybrid, Veazy, and Venty devices. Click the button above to connect via Bluetooth.",
+      "This app supports Volcano Hybrid, Veazy, Venty and Crafty devices. Click the button below to connect via Bluetooth.",
     connectDevice: "Connect Device",
     connectNewDevice: "Connect New Device",
     connectingTo: "Connecting to",
