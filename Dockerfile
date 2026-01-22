@@ -8,7 +8,7 @@ RUN a2enmod rewrite
 WORKDIR /var/www/html
 
 # Copy project files into container
-COPY . /var/www/html/
+COPY dist/. /var/www/html/
 
 # Expose HTTP port
 EXPOSE 80
