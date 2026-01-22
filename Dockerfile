@@ -1,19 +1,17 @@
-FROM node:18-alpine AS build
+# Use official PHP + Apache image
+FROM php:8.2-apache
 
-WORKDIR /app
+# Enable Apache rewrite module (optional if you use .htaccess)
+RUN a2enmod rewrite
 
-COPY package*.json ./
+# Set working directory
+WORKDIR /var/www/html
 
-RUN npm ci
+# Copy project files into container
+COPY . /var/www/html/
 
-COPY . .
-
-RUN npm run build
-
-FROM nginx:alpine
-
-COPY --from=build /app/dist /usr/share/nginx/html
-
+# Expose HTTP port
 EXPOSE 80
 
-CMD ["nginx", "-g", "daemon off;"]
+# Start Apache in foreground
+CMD ["apache2-foreground"]
