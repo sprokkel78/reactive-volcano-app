@@ -10,12 +10,12 @@ const StyledDiv = styled("div")<StyledDivProps>`
   display: ${(props) => (props.isVisible ? "flex" : "none")};
   align-items: center;
   justify-content: center;
-  font-family: CustomFont;
+  font-family: Arial;
   background: rgba(255, 102, 0, 0.1);
   border: 1px solid var(--accent-color);
   border-radius: 8px;
   padding: 12px 20px;
-  color: var(--accent-color);
+  color: #fff;
   font-size: 1rem;
   font-weight: 600;
   text-align: center;
