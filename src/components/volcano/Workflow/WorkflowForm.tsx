@@ -127,7 +127,7 @@ export const WorkflowForm: Component = () => {
               label={`${t("pumpTime")}: ${pumpTime()} ${t("sec")}`}
               min={0}
               step={5}
-              max={60}
+              max={120}
               onInput={(value) => setPumpTime(value)}
             />
           </SliderSection>
