@@ -16,3 +16,7 @@ To develop and build this project, follow these steps:
 # License
 
 This work is currently licensed under a [Creative Commons Attribution-NonCommercial 4.0 International License](http://creativecommons.org/licenses/by-nc/4.0/).
+
+# Tip
+
+At 78 degrees celcius you can use your volcano to dry wet herb.
